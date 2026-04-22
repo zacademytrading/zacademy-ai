@@ -116,27 +116,33 @@ export default function Home() {
       // ── Flow 1: Implicit (hash-based) — #access_token=xxx
       const hash = window.location.hash;
       if (hash && hash.includes('access_token')) {
-        const params = new URLSearchParams(hash.substring(1));
-        const accessToken = params.get('access_token');
-        if (accessToken) {
-          const supaUser = await getUser(accessToken);
-          if (supaUser && supaUser.id) {
-            const u: User = {
-              id: supaUser.id,
-              email: supaUser.email,
-              name: supaUser.user_metadata?.full_name || supaUser.email?.split('@')[0] || 'User',
-              settings: { theme: 'dark', language: 'Bahasa Indonesia', personalIntelligence: '' }
-            };
-            localStorage.setItem('zenix_user', JSON.stringify(u));
-            localStorage.setItem('zenix_token', accessToken);
-            setUser(u);
-            setSettings(u.settings);
-            setAuthMode(null);
-            fetchChats(u.id);
-            window.history.replaceState(null, '', window.location.pathname);
-            setIsAppLoading(false);
-            return;
+        try {
+          const params = new URLSearchParams(hash.substring(1));
+          const accessToken = params.get('access_token');
+          if (accessToken) {
+            const supaUser = await getUser(accessToken);
+            if (supaUser && supaUser.id) {
+              const u: User = {
+                id: supaUser.id,
+                email: supaUser.email,
+                name: supaUser.user_metadata?.full_name || supaUser.email?.split('@')[0] || 'User',
+                settings: { theme: 'dark', language: 'Bahasa Indonesia', personalIntelligence: '' }
+              };
+              localStorage.setItem('zenix_user', JSON.stringify(u));
+              localStorage.setItem('zenix_token', accessToken);
+              setUser(u);
+              setSettings(u.settings);
+              setAuthMode(null);
+              fetchChats(u.id);
+              window.history.replaceState(null, '', window.location.pathname);
+              setIsAppLoading(false);
+              return;
+            } else {
+              alert('Gagal mengambil profil user dari Supabase (Cek Anon Key Anda).');
+            }
           }
+        } catch (e) {
+          alert('Error memproses token Google: ' + String(e));
         }
       }
 
@@ -243,10 +249,10 @@ export default function Home() {
       } catch (e: any) { alert(e?.message || 'Gagal login'); }
     } else {
       if (!regName) return alert('Nama harus diisi');
-      if (!loginEmail) return alert('Email harus diisi');
-      if (!loginPass || loginPass.length < 6) return alert('Password minimal 6 karakter');
+      if (!regEmail) return alert('Email harus diisi');
+      if (!regPass || regPass.length < 6) return alert('Password minimal 6 karakter');
       try {
-        const result = await signUpWithEmail(loginEmail, loginPass, regName);
+        const result = await signUpWithEmail(regEmail, regPass, regName);
         if (result?.id || result?.user?.id) {
           alert('Akun berhasil dibuat! Silakan login dengan email Anda.');
           setAuthMode('login');
