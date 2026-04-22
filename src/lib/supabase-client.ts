@@ -4,57 +4,73 @@
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xktkruqvaylhsgwvwjjw.supabase.co').replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhrdGtydXF2YXlsaHNnd3Z3amp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDkzNTEsImV4cCI6MjA5MjQyNTM1MX0.j61VE-Nlhd-AUB5Vtnegi9a2_0jofS9CQkv9jg9tIDY';
 
-const headers = {
+const authHeaders = {
   apikey: SUPABASE_ANON_KEY,
   Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
   'Content-Type': 'application/json',
+};
+
+const dbHeaders = {
+  ...authHeaders,
   Prefer: 'return=representation'
 };
 
 // Database Methods
 export const supabaseDb = {
-  async getChats(userId: string) {
+  async getChats(userId: string, accessToken?: string) {
     if (!SUPABASE_URL) return [];
+    const headers = accessToken
+      ? { ...dbHeaders, Authorization: `Bearer ${accessToken}` }
+      : dbHeaders;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/chats?user_id=eq.${userId}&order=created_at.desc`, { headers });
     if (!res.ok) return [];
     return res.json();
   },
   
-  async upsertChat(chat: any) {
+  async upsertChat(chat: any, accessToken?: string) {
     if (!SUPABASE_URL) return;
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/chats?id=eq.${chat.id}`, {
-      method: 'GET',
-      headers
-    });
-    const exists = await res.json();
-    
+    const headers = accessToken
+      ? { ...dbHeaders, Authorization: `Bearer ${accessToken}` }
+      : dbHeaders;
+
+    const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/chats?id=eq.${chat.id}`, { method: 'GET', headers });
+    const exists = await checkRes.json().catch(() => []);
+
     if (exists && exists.length > 0) {
       await fetch(`${SUPABASE_URL}/rest/v1/chats?id=eq.${chat.id}`, {
-        method: 'PATCH',
-        headers,
-        body: JSON.stringify(chat)
+        method: 'PATCH', headers, body: JSON.stringify(chat)
       });
     } else {
       await fetch(`${SUPABASE_URL}/rest/v1/chats`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(chat)
+        method: 'POST', headers, body: JSON.stringify(chat)
       });
     }
   },
 
-  async deleteChat(chatId: string) {
+  async deleteChat(chatId: string, accessToken?: string) {
     if (!SUPABASE_URL) return;
-    await fetch(`${SUPABASE_URL}/rest/v1/chats?id=eq.${chatId}`, {
-      method: 'DELETE',
-      headers
-    });
+    const headers = accessToken
+      ? { ...dbHeaders, Authorization: `Bearer ${accessToken}` }
+      : dbHeaders;
+    await fetch(`${SUPABASE_URL}/rest/v1/chats?id=eq.${chatId}`, { method: 'DELETE', headers });
   }
 };
 
-// Auth URL Generator
+// Auth URL Generator — force implicit flow (hash-based token) instead of PKCE
 export const getGoogleAuthUrl = (redirectUrl: string) => {
-  return `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUrl)}`;
+  return `${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectUrl)}&response_type=token`;
+};
+
+// Exchange PKCE code for session (fallback for code-based flow)
+export const exchangeCodeForSession = async (code: string) => {
+  if (!SUPABASE_URL) return null;
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=pkce`, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ auth_code: code }),
+  });
+  if (!res.ok) return null;
+  return res.json();
 };
 
 // Get user from access token

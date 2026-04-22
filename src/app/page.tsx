@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Plus, Settings, Camera, ChevronDown, Zap, BarChart2, Activity, Menu, X, LogIn, Moon, Sun, Globe, Brain, Mic, MicOff, Share2, Layers } from 'lucide-react';
 import { ZACADEMY_MODELS, type ModelKey } from '@/lib/models';
-import { supabaseDb, getGoogleAuthUrl, getUser } from '@/lib/supabase-client';
+import { supabaseDb, getGoogleAuthUrl, getUser, exchangeCodeForSession } from '@/lib/supabase-client';
 
 interface Message { id: string; role: 'user' | 'assistant'; content: string; image?: string; images?: string[]; isTyping?: boolean; }
 interface ChatSession { id: string; title: string; messages: Message[] }
@@ -112,45 +112,79 @@ export default function Home() {
 
   // Load User from LocalStorage on mount
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.includes('access_token')) {
-      const params = new URLSearchParams(hash.substring(1));
-      const accessToken = params.get('access_token');
-      if (accessToken) {
-        getUser(accessToken).then(supaUser => {
-          if (supaUser) {
+    const handleSupabaseCallback = async () => {
+      // ── Flow 1: Implicit (hash-based) — #access_token=xxx
+      const hash = window.location.hash;
+      if (hash && hash.includes('access_token')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const accessToken = params.get('access_token');
+        if (accessToken) {
+          const supaUser = await getUser(accessToken);
+          if (supaUser && supaUser.id) {
             const u: User = {
               id: supaUser.id,
               email: supaUser.email,
-              name: supaUser.user_metadata?.full_name || supaUser.email.split('@')[0],
+              name: supaUser.user_metadata?.full_name || supaUser.email?.split('@')[0] || 'User',
               settings: { theme: 'dark', language: 'Bahasa Indonesia', personalIntelligence: '' }
             };
             localStorage.setItem('zenix_user', JSON.stringify(u));
             localStorage.setItem('zenix_token', accessToken);
             setUser(u);
+            setSettings(u.settings);
             setAuthMode(null);
             fetchChats(u.id);
-            window.location.hash = '';
-          } else {
-            setAuthMode('login');
+            window.history.replaceState(null, '', window.location.pathname);
+            setIsAppLoading(false);
+            return;
           }
-          setIsAppLoading(false);
-        });
-        return;
+        }
       }
-    }
 
-    const stored = localStorage.getItem('zenix_user');
-    if (stored) {
-      const u = JSON.parse(stored);
-      setUser(u);
-      setSettings(u.settings);
-      setAuthMode(null);
-      fetchChats(u.id);
-    } else {
-      setAuthMode('login');
-    }
-    setIsAppLoading(false);
+      // ── Flow 2: PKCE (code-based) — ?code=xxx
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      if (code) {
+        const session = await exchangeCodeForSession(code);
+        const accessToken = session?.access_token;
+        if (accessToken) {
+          const supaUser = await getUser(accessToken);
+          if (supaUser && supaUser.id) {
+            const u: User = {
+              id: supaUser.id,
+              email: supaUser.email,
+              name: supaUser.user_metadata?.full_name || supaUser.email?.split('@')[0] || 'User',
+              settings: { theme: 'dark', language: 'Bahasa Indonesia', personalIntelligence: '' }
+            };
+            localStorage.setItem('zenix_user', JSON.stringify(u));
+            localStorage.setItem('zenix_token', accessToken);
+            setUser(u);
+            setSettings(u.settings);
+            setAuthMode(null);
+            fetchChats(u.id);
+            window.history.replaceState(null, '', window.location.pathname);
+            setIsAppLoading(false);
+            return;
+          }
+        }
+      }
+
+      // ── Flow 3: Already logged in (localStorage)
+      const stored = localStorage.getItem('zenix_user');
+      if (stored) {
+        try {
+          const u = JSON.parse(stored);
+          setUser(u);
+          setSettings(u.settings || { theme: 'dark', language: 'Bahasa Indonesia', personalIntelligence: '' });
+          setAuthMode(null);
+          fetchChats(u.id);
+        } catch { localStorage.removeItem('zenix_user'); setAuthMode('login'); }
+      } else {
+        setAuthMode('login');
+      }
+      setIsAppLoading(false);
+    };
+
+    handleSupabaseCallback();
   }, []);
 
   // Apply Theme
