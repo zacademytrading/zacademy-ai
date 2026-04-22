@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Plus, Settings, Camera, ChevronDown, Zap, BarChart2, Activity, Menu, X, LogIn, Moon, Sun, Globe, Brain, Mic, MicOff, Share2, Layers } from 'lucide-react';
 import { ZACADEMY_MODELS, type ModelKey } from '@/lib/models';
-import { supabaseDb, getGoogleAuthUrl, getUser, exchangeCodeForSession } from '@/lib/supabase-client';
+import { supabaseDb, getGoogleAuthUrl, getUser, exchangeCodeForSession, signInWithEmail, signUpWithEmail } from '@/lib/supabase-client';
 
 interface Message { id: string; role: 'user' | 'assistant'; content: string; image?: string; images?: string[]; isTyping?: boolean; }
 interface ChatSession { id: string; title: string; messages: Message[] }
@@ -219,8 +219,43 @@ export default function Home() {
   };
 
   const handleAuth = async (action: 'login' | 'register') => {
-    // Deprecated for Supabase
-    window.location.href = getGoogleAuthUrl(window.location.origin);
+    if (action === 'login') {
+      if (!loginEmail) return alert('Email harus diisi');
+      if (!loginPass) return alert('Password harus diisi');
+      try {
+        const session = await signInWithEmail(loginEmail, loginPass);
+        const accessToken = session?.access_token;
+        const supaUser = session?.user;
+        if (accessToken && supaUser) {
+          const u: User = {
+            id: supaUser.id,
+            email: supaUser.email,
+            name: supaUser.user_metadata?.full_name || supaUser.email?.split('@')[0] || 'User',
+            settings: { theme: 'dark', language: 'Bahasa Indonesia', personalIntelligence: '' }
+          };
+          localStorage.setItem('zenix_user', JSON.stringify(u));
+          localStorage.setItem('zenix_token', accessToken);
+          setUser(u);
+          setSettings(u.settings);
+          setAuthMode(null);
+          fetchChats(u.id);
+        }
+      } catch (e: any) { alert(e?.message || 'Gagal login'); }
+    } else {
+      if (!regName) return alert('Nama harus diisi');
+      if (!loginEmail) return alert('Email harus diisi');
+      if (!loginPass || loginPass.length < 6) return alert('Password minimal 6 karakter');
+      try {
+        const result = await signUpWithEmail(loginEmail, loginPass, regName);
+        if (result?.id || result?.user?.id) {
+          alert('Akun berhasil dibuat! Silakan login dengan email Anda.');
+          setAuthMode('login');
+        } else {
+          alert('Akun berhasil dibuat! Cek email untuk konfirmasi, lalu login.');
+          setAuthMode('login');
+        }
+      } catch (e: any) { alert(e?.message || 'Gagal membuat akun'); }
+    }
   };
 
   const handleLogout = () => {
