@@ -2,7 +2,10 @@
 // Lightweight Supabase REST API client (No npm install required)
 
 const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xktkruqvaylhsgwvwjjw.supabase.co').replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhrdGtydXF2YXlsaHNnd3Z3amp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDkzNTEsImV4cCI6MjA5MjQyNTM1MX0.j61VE-Nlhd-AUB5Vtnegi9a2_0jofS9CQkv9jg9tIDY';
+let rawKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhrdGtydXF2YXlsaHNnd3Z3amp3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY4NDkzNTEsImV4cCI6MjA5MjQyNTM1MX0.j61VE-Nlhd-AUB5Vtnegi9a2_0jofS9CQkv9jg9tIDY';
+// Fix user's duplicate JWT key paste
+const parts = rawKey.split('.');
+const SUPABASE_ANON_KEY = parts.length >= 3 ? `${parts[0]}.${parts[1]}.${parts[2]}` : rawKey;
 
 const authHeaders = {
   apikey: SUPABASE_ANON_KEY,
